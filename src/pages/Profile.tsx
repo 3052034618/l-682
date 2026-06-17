@@ -16,6 +16,113 @@ function getMediaUrl(url: string): string {
   return url;
 }
 
+function AudioPlayer({ work, onClose }: { work: Work; onClose: () => void }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(work.duration || 0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onLoadedMetadata = () => setDuration(audio.duration);
+    const onEnded = () => setPlaying(false);
+    
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('ended', onEnded);
+    
+    audio.play().catch(() => setPlaying(false));
+    
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, [work.id]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); } else { audio.play(); }
+    setPlaying(!playing);
+  };
+
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const time = Number(e.target.value);
+    audio.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-lg border-t border-dark-700/50 animate-fade-in">
+      <audio ref={audioRef} src={getMediaUrl(work.mediaUrl)} preload="metadata" />
+      <div className="container mx-auto px-4 py-3 flex items-center gap-4">
+        <img src={work.coverImage} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-dark-100 font-medium text-sm truncate">{work.title}</p>
+          <p className="text-dark-500 text-xs truncate">{work.username}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={togglePlay} className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center hover:scale-105 transition-transform">
+            {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <span className="text-xs text-dark-500 w-10 text-right">{formatTime(currentTime)}</span>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            value={currentTime}
+            onChange={seek}
+            className="flex-1 h-1 rounded-full appearance-none bg-dark-600 accent-primary-500 cursor-pointer"
+          />
+          <span className="text-xs text-dark-500 w-10">{formatTime(duration)}</span>
+        </div>
+        <button onClick={onClose} className="text-dark-400 hover:text-white p-2">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VideoPlayer({ work, onClose }: { work: Work; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/90 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div className="relative w-full max-w-4xl mx-4" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute -top-10 right-0 text-dark-400 hover:text-white">
+          <X className="w-6 h-6" />
+        </button>
+        <video
+          src={getMediaUrl(work.mediaUrl)}
+          controls
+          autoPlay
+          className="w-full rounded-xl"
+          poster={work.coverImage}
+        >
+          您的浏览器不支持视频播放
+        </video>
+        <div className="mt-3">
+          <h3 className="text-lg font-semibold text-dark-100">{work.title}</h3>
+          <p className="text-sm text-dark-400">{work.username}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Profile() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,8 +137,7 @@ export default function Profile() {
   const [qrCode, setQrCode] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [renewNotice, setRenewNotice] = useState<Booking | null>(null);
-  const [playingWorkId, setPlayingWorkId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingWork, setPlayingWork] = useState<Work | null>(null);
   const [, forceUpdate] = useState(0);
   const pollRef = useRef<number | null>(null);
 
@@ -109,7 +215,9 @@ export default function Profile() {
     setLoading(true);
     try {
       const data = await workApi.getByUser(user.id);
-      setWorks(data);
+      if (Array.isArray(data)) {
+        setWorks(data);
+      }
     } catch (err) {
       console.error('Failed to fetch works:', err);
     } finally {
@@ -520,35 +628,15 @@ export default function Profile() {
                           <div className="absolute inset-0 bg-dark-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                             <button
                               onClick={() => {
-                                if (work.mediaType === 'video') {
-                                  const v = document.createElement('video');
-                                  v.src = getMediaUrl(work.mediaUrl);
-                                  v.controls = true;
-                                  v.autoplay = true;
-                                  v.poster = work.coverImage;
-                                  v.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90vw;max-height:80vh;border-radius:12px;z-index:9999';
-                                  const overlay = document.createElement('div');
-                                  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9998';
-                                  overlay.onclick = () => { overlay.remove(); v.remove(); };
-                                  document.body.appendChild(overlay);
-                                  document.body.appendChild(v);
+                                if (playingWork?.id === work.id) {
+                                  setPlayingWork(null);
                                 } else {
-                                  if (playingWorkId === work.id) {
-                                    audioRef.current?.pause();
-                                    setPlayingWorkId(null);
-                                  } else {
-                                    if (audioRef.current) audioRef.current.pause();
-                                    const audio = new Audio(getMediaUrl(work.mediaUrl));
-                                    audio.onended = () => setPlayingWorkId(null);
-                                    audio.play();
-                                    audioRef.current = audio;
-                                    setPlayingWorkId(work.id);
-                                  }
+                                  setPlayingWork(work);
                                 }
                               }}
-                              className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                              className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:scale-110 transition-transform"
                             >
-                              {playingWorkId === work.id ? (
+                              {playingWork?.id === work.id ? (
                                 <Pause className="w-5 h-5 text-white" />
                               ) : (
                                 <Play className="w-5 h-5 text-white ml-0.5" />
@@ -611,48 +699,60 @@ export default function Profile() {
                   <div className="space-y-3">
                     {payments.map((payment) => {
                       const isRefund = payment.amount < 0 || payment.status === 'refunded';
+                      const isNoShowRefund = payment.reason?.includes('未到场') || payment.reason?.includes('违约金');
                       const displayAmount = Math.abs(payment.amount);
                       const reason = payment.reason || (isRefund ? '退款' : '预约支付');
                       
                       return (
-                        <div key={payment.id} className="card p-5 flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            isRefund ? 'bg-emerald-500/20' : 'bg-primary-500/20'
-                          }`}>
-                            {isRefund ? (
-                              <ArrowDownRight className="w-5 h-5 text-emerald-400" />
-                            ) : (
-                              <ArrowUpRight className="w-5 h-5 text-primary-400" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-dark-100 font-medium text-sm">{reason}</span>
-                              <span className={`badge text-xs ${
-                                payment.status === 'success' ? 'badge-success' :
-                                payment.status === 'refunded' ? 'badge-warning' : 'badge-info'
-                              }`}>
-                                {payment.status === 'success' ? '成功' :
-                                 payment.status === 'refunded' ? '已退款' : payment.status}
-                              </span>
-                            </div>
-                            <div className="text-xs text-dark-500">
-                              {payment.paidAt ? new Date(payment.paidAt).toLocaleString('zh-CN') : ''}
-                              {payment.bookingId && ` · 订单 ${payment.bookingId.slice(-8)}`}
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`font-bold ${
-                              isRefund ? 'text-emerald-400' : 'text-dark-100'
+                        <div key={payment.id} className="card p-5">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              isRefund ? 'bg-emerald-500/20' : 'bg-primary-500/20'
                             }`}>
-                              {isRefund ? '+' : '-'}¥{displayAmount}
+                              {isRefund ? (
+                                <ArrowDownRight className="w-5 h-5 text-emerald-400" />
+                              ) : (
+                                <ArrowUpRight className="w-5 h-5 text-primary-400" />
+                              )}
                             </div>
-                            {payment.refundAmount && payment.refundAmount > 0 && (
-                              <div className="text-xs text-emerald-400">
-                                退 ¥{payment.refundAmount}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-dark-100 font-medium text-sm">{reason}</span>
+                                <span className={`badge text-xs ${
+                                  isNoShowRefund ? 'badge-danger' :
+                                  payment.status === 'success' ? 'badge-success' :
+                                  payment.status === 'refunded' ? 'badge-warning' : 'badge-info'
+                                }`}>
+                                  {isNoShowRefund ? '违约' :
+                                   payment.status === 'success' ? '成功' :
+                                   payment.status === 'refunded' ? '已退款' : payment.status}
+                                </span>
                               </div>
-                            )}
+                              <div className="text-xs text-dark-500">
+                                {payment.paidAt ? new Date(payment.paidAt).toLocaleString('zh-CN') : ''}
+                                {payment.bookingId && ` · 订单 ${payment.bookingId.slice(-8)}`}
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={`font-bold text-lg ${
+                                isRefund ? 'text-emerald-400' : 'text-dark-100'
+                              }`}>
+                                {isRefund ? '+' : '-'}¥{displayAmount.toFixed(2)}
+                              </div>
+                              {isNoShowRefund && payment.refundAmount && (
+                                <div className="text-xs text-dark-500 mt-0.5">
+                                  违约金 ¥{(Math.abs(payment.amount)).toFixed(2)}
+                                </div>
+                              )}
+                            </div>
                           </div>
+                          {isNoShowRefund && (
+                            <div className="mt-3 pt-3 border-t border-dark-700/50">
+                              <p className="text-xs text-dark-500">
+                                温馨提示：预约后请按时到场，未到场将扣除50%费用作为违约金
+                              </p>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -748,6 +848,13 @@ export default function Profile() {
             </button>
           </div>
         </div>
+      )}
+
+      {playingWork && playingWork.mediaType === 'audio' && (
+        <AudioPlayer work={playingWork} onClose={() => setPlayingWork(null)} />
+      )}
+      {playingWork && playingWork.mediaType === 'video' && (
+        <VideoPlayer work={playingWork} onClose={() => setPlayingWork(null)} />
       )}
     </div>
   );
