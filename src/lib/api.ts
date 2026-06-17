@@ -113,6 +113,8 @@ export const bookingApi = {
 };
 
 export const paymentApi = {
+  getList: () => request<Payment[]>('/payments'),
+  
   create: (bookingId: string, method: string = 'wechat') =>
     request<Payment>('/payments', {
       method: 'POST',

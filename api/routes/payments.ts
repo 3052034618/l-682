@@ -6,6 +6,20 @@ import type { Payment, ApiResponse } from '../../shared/types.js';
 
 const router = Router();
 
+router.get('/', authMiddleware, (req: any, res) => {
+  const db = getDb();
+  
+  const userBookingIds = db.bookings
+    .filter(b => b.userId === req.user.id)
+    .map(b => b.id);
+  
+  const userPayments = db.payments
+    .filter(p => userBookingIds.includes(p.bookingId))
+    .sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
+  
+  res.json({ success: true, data: userPayments } as ApiResponse<Payment[]>);
+});
+
 router.post('/', authMiddleware, (req: any, res) => {
   const { bookingId, method } = req.body;
   const db = getDb();

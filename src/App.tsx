@@ -32,6 +32,7 @@ function AppContent() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/profile/bookings" element={<Profile />} />
         <Route path="/profile/works" element={<Profile />} />
+        <Route path="/profile/payments" element={<Profile />} />
         <Route path="/profile/settings" element={<Profile />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<AdminDashboard />} />

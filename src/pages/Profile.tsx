@@ -3,11 +3,18 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User, Calendar, Music, Settings, QrCode, Clock, Star,
   ChevronRight, LogOut, Camera, Upload, Play, Heart,
-  AlertCircle, CheckCircle, Bell, X
+  AlertCircle, CheckCircle, Bell, X, CreditCard, Receipt,
+  ArrowUpRight, ArrowDownRight, Pause
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { bookingApi, workApi } from '@/lib/api';
-import type { Booking, Work } from '../../shared/types';
+import { bookingApi, workApi, paymentApi } from '@/lib/api';
+import type { Booking, Work, Payment } from '../../shared/types';
+
+function getMediaUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  return url;
+}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -17,17 +24,20 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState('bookings');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [works, setWorks] = useState<Work[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrCode, setQrCode] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [renewNotice, setRenewNotice] = useState<Booking | null>(null);
+  const [playingWorkId, setPlayingWorkId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [, forceUpdate] = useState(0);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
     const path = location.pathname.split('/').pop();
-    if (path === 'bookings' || path === 'works' || path === 'settings') {
+    if (path === 'bookings' || path === 'works' || path === 'settings' || path === 'payments') {
       setActiveTab(path);
     }
   }, [location]);
@@ -37,6 +47,8 @@ export default function Profile() {
       fetchBookings();
     } else if (activeTab === 'works') {
       fetchWorks();
+    } else if (activeTab === 'payments') {
+      fetchPayments();
     }
   }, [activeTab, user?.id]);
 
@@ -45,7 +57,7 @@ export default function Profile() {
     if (activeTab === 'works') {
       fetchWorks();
     }
-  }, [location.key]);
+  }, [location.key, location.pathname]);
 
   useEffect(() => {
     if (activeTab === 'bookings' && user) {
@@ -100,6 +112,18 @@ export default function Profile() {
       setWorks(data);
     } catch (err) {
       console.error('Failed to fetch works:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPayments = async () => {
+    setLoading(true);
+    try {
+      const data = await paymentApi.getList();
+      setPayments(data);
+    } catch (err) {
+      console.error('Failed to fetch payments:', err);
     } finally {
       setLoading(false);
     }
@@ -178,6 +202,7 @@ export default function Profile() {
   const navItems = [
     { id: 'bookings', label: '我的预约', icon: Calendar, path: '/profile/bookings' },
     { id: 'works', label: '我的作品', icon: Music, path: '/profile/works' },
+    { id: 'payments', label: '订单流水', icon: Receipt, path: '/profile/payments' },
     { id: 'settings', label: '账户设置', icon: Settings, path: '/profile/settings' },
   ];
 
@@ -493,10 +518,46 @@ export default function Profile() {
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           />
                           <div className="absolute inset-0 bg-dark-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                              <Play className="w-5 h-5 text-white ml-0.5" />
-                            </div>
+                            <button
+                              onClick={() => {
+                                if (work.mediaType === 'video') {
+                                  const v = document.createElement('video');
+                                  v.src = getMediaUrl(work.mediaUrl);
+                                  v.controls = true;
+                                  v.autoplay = true;
+                                  v.poster = work.coverImage;
+                                  v.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:90vw;max-height:80vh;border-radius:12px;z-index:9999';
+                                  const overlay = document.createElement('div');
+                                  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9998';
+                                  overlay.onclick = () => { overlay.remove(); v.remove(); };
+                                  document.body.appendChild(overlay);
+                                  document.body.appendChild(v);
+                                } else {
+                                  if (playingWorkId === work.id) {
+                                    audioRef.current?.pause();
+                                    setPlayingWorkId(null);
+                                  } else {
+                                    if (audioRef.current) audioRef.current.pause();
+                                    const audio = new Audio(getMediaUrl(work.mediaUrl));
+                                    audio.onended = () => setPlayingWorkId(null);
+                                    audio.play();
+                                    audioRef.current = audio;
+                                    setPlayingWorkId(work.id);
+                                  }
+                                }
+                              }}
+                              className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                            >
+                              {playingWorkId === work.id ? (
+                                <Pause className="w-5 h-5 text-white" />
+                              ) : (
+                                <Play className="w-5 h-5 text-white ml-0.5" />
+                              )}
+                            </button>
                           </div>
+                          {work.mediaType === 'video' && (
+                            <div className="absolute top-2 right-2 px-2 py-1 rounded-md bg-rose-500/80 text-xs text-white">视频</div>
+                          )}
                         </div>
                         <div className="p-4">
                           <h4 className="font-medium text-dark-100 truncate mb-1">{work.title}</h4>
@@ -519,6 +580,82 @@ export default function Profile() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'payments' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-dark-50">订单流水</h2>
+                </div>
+                
+                {loading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="card p-6 animate-pulse">
+                        <div className="h-6 bg-dark-700 rounded w-1/3 mb-4" />
+                        <div className="h-4 bg-dark-700 rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : payments.length === 0 ? (
+                  <div className="card p-12 text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-800/50 flex items-center justify-center">
+                      <Receipt className="w-8 h-8 text-dark-600" />
+                    </div>
+                    <p className="text-dark-500 mb-4">暂无交易记录</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {payments.map((payment) => {
+                      const isRefund = payment.amount < 0 || payment.status === 'refunded';
+                      const displayAmount = Math.abs(payment.amount);
+                      const reason = payment.reason || (isRefund ? '退款' : '预约支付');
+                      
+                      return (
+                        <div key={payment.id} className="card p-5 flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            isRefund ? 'bg-emerald-500/20' : 'bg-primary-500/20'
+                          }`}>
+                            {isRefund ? (
+                              <ArrowDownRight className="w-5 h-5 text-emerald-400" />
+                            ) : (
+                              <ArrowUpRight className="w-5 h-5 text-primary-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-dark-100 font-medium text-sm">{reason}</span>
+                              <span className={`badge text-xs ${
+                                payment.status === 'success' ? 'badge-success' :
+                                payment.status === 'refunded' ? 'badge-warning' : 'badge-info'
+                              }`}>
+                                {payment.status === 'success' ? '成功' :
+                                 payment.status === 'refunded' ? '已退款' : payment.status}
+                              </span>
+                            </div>
+                            <div className="text-xs text-dark-500">
+                              {payment.paidAt ? new Date(payment.paidAt).toLocaleString('zh-CN') : ''}
+                              {payment.bookingId && ` · 订单 ${payment.bookingId.slice(-8)}`}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`font-bold ${
+                              isRefund ? 'text-emerald-400' : 'text-dark-100'
+                            }`}>
+                              {isRefund ? '+' : '-'}¥{displayAmount}
+                            </div>
+                            {payment.refundAmount && payment.refundAmount > 0 && (
+                              <div className="text-xs text-emerald-400">
+                                退 ¥{payment.refundAmount}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

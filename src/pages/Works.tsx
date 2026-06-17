@@ -1,8 +1,121 @@
-import { useState, useEffect } from 'react';
-import { Play, Heart, Star, Headphones, Search, Filter, Music, Video, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Play, Heart, Star, Headphones, Search, Filter, Music, Video, X, Pause, SkipBack, SkipForward } from 'lucide-react';
 import type { Work } from '../../shared/types';
 import { workApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+
+function getMediaUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  return url;
+}
+
+function AudioPlayer({ work, onClose }: { work: Work; onClose: () => void }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(work.duration || 0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onLoadedMetadata = () => setDuration(audio.duration);
+    const onEnded = () => setPlaying(false);
+    
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('ended', onEnded);
+    
+    audio.play().catch(() => setPlaying(false));
+    
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); } else { audio.play(); }
+    setPlaying(!playing);
+  };
+
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const time = Number(e.target.value);
+    audio.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-dark-800/95 backdrop-blur-lg border-t border-dark-700/50 animate-fade-in">
+      <audio ref={audioRef} src={getMediaUrl(work.mediaUrl)} preload="metadata" />
+      <div className="container mx-auto px-4 py-3 flex items-center gap-4">
+        <img src={work.coverImage} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-dark-100 font-medium text-sm truncate">{work.title}</p>
+          <p className="text-dark-500 text-xs truncate">{work.username}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={togglePlay} className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center hover:scale-105 transition-transform">
+            {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <span className="text-xs text-dark-500 w-10 text-right">{formatTime(currentTime)}</span>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            value={currentTime}
+            onChange={seek}
+            className="flex-1 h-1 rounded-full appearance-none bg-dark-600 accent-primary-500 cursor-pointer"
+          />
+          <span className="text-xs text-dark-500 w-10">{formatTime(duration)}</span>
+        </div>
+        <button onClick={onClose} className="text-dark-400 hover:text-white p-2">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VideoPlayer({ work, onClose }: { work: Work; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/90 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div className="relative w-full max-w-4xl mx-4" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute -top-10 right-0 text-dark-400 hover:text-white">
+          <X className="w-6 h-6" />
+        </button>
+        <video
+          src={getMediaUrl(work.mediaUrl)}
+          controls
+          autoPlay
+          className="w-full rounded-xl"
+          poster={work.coverImage}
+        >
+          您的浏览器不支持视频播放
+        </video>
+        <div className="mt-3">
+          <h3 className="text-lg font-semibold text-dark-100">{work.title}</h3>
+          <p className="text-sm text-dark-400">{work.username}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Works() {
   const { isAuthenticated } = useAuthStore();
@@ -11,7 +124,7 @@ export default function Works() {
   const [sortBy, setSortBy] = useState('popular');
   const [typeFilter, setTypeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [playingWork, setPlayingWork] = useState<Work | null>(null);
   const [ratingWork, setRatingWork] = useState<Work | null>(null);
   const [hoverRating, setHoverRating] = useState(0);
   const [selectedRating, setSelectedRating] = useState(0);
@@ -41,8 +154,8 @@ export default function Works() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handlePlay = (id: string) => {
-    setPlayingId(playingId === id ? null : id);
+  const handlePlay = (work: Work) => {
+    setPlayingWork(playingWork?.id === work.id ? null : work);
   };
 
   const handleLike = async (id: string) => {
@@ -192,10 +305,10 @@ export default function Works() {
                   />
                   <div className="absolute inset-0 bg-dark-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <button
-                      onClick={() => handlePlay(work.id)}
+                      onClick={() => handlePlay(work)}
                       className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-lg shadow-primary-500/30 hover:scale-110 transition-transform"
                     >
-                      {playingId === work.id ? (
+                      {playingWork?.id === work.id ? (
                         <div className="flex gap-1">
                           <div className="w-1 h-5 bg-white rounded animate-pulse" />
                           <div className="w-1 h-5 bg-white rounded animate-pulse" style={{ animationDelay: '0.2s' }} />
@@ -336,6 +449,13 @@ export default function Works() {
             </div>
           </div>
         </div>
+      )}
+
+      {playingWork && playingWork.mediaType === 'audio' && (
+        <AudioPlayer work={playingWork} onClose={() => setPlayingWork(null)} />
+      )}
+      {playingWork && playingWork.mediaType === 'video' && (
+        <VideoPlayer work={playingWork} onClose={() => setPlayingWork(null)} />
       )}
     </div>
   );

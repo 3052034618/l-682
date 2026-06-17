@@ -459,9 +459,36 @@ export default function Booking() {
               </button>
             </div>
             
-            <div className="text-center mb-6">
-              <div className="text-sm text-dark-400 mb-1">支付金额</div>
-              <div className="text-4xl font-bold gradient-text">¥{getTotalPrice()}</div>
+            <div className="mb-6 p-4 rounded-xl bg-dark-800/50 border border-dark-700/50 space-y-3">
+              <h4 className="text-sm font-medium text-dark-300 mb-2">订单确认</h4>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">工作室</span>
+                <span className="text-dark-200 font-medium">{studio?.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">预约日期</span>
+                <span className="text-dark-200 font-medium">{selectedDate}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">开始时间</span>
+                <span className="text-dark-200 font-medium">{getTimeRange().startTime}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">结束时间</span>
+                <span className="text-dark-200 font-medium">{getTimeRange().endTime}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">总时长</span>
+                <span className="text-dark-200 font-medium">{getTotalHours()} 小时</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dark-400">单价</span>
+                <span className="text-dark-200">¥{studio?.pricePerHour}/小时</span>
+              </div>
+              <div className="border-t border-dark-600/50 pt-3 flex justify-between items-center">
+                <span className="text-dark-200 font-medium">应付金额</span>
+                <span className="text-2xl font-bold gradient-text">¥{getTotalPrice()}</span>
+              </div>
             </div>
             
             <div className="space-y-3 mb-6">
@@ -501,7 +528,7 @@ export default function Booking() {
               disabled={processing}
               className="w-full btn-primary text-lg"
             >
-              {processing ? '处理中...' : '确认支付'}
+              {processing ? '处理中...' : `确认支付 ¥${getTotalPrice()}`}
             </button>
           </div>
         </div>
