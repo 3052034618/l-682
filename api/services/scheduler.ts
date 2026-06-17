@@ -19,6 +19,12 @@ export function processNoShowBookings() {
 
     if (now > graceTime) {
       db.bookings[i].status = 'no_show';
+      db.bookings[i].noShowInfo = {
+        originalPrice: booking.totalPrice,
+        penaltyAmount: Math.round(booking.totalPrice * 0.5 * 100) / 100,
+        refundAmount: Math.round(booking.totalPrice * 0.5 * 100) / 100,
+        releasedAt: now.toISOString(),
+      };
       changed = true;
 
       const penaltyAmount = Math.round(booking.totalPrice * 0.5 * 100) / 100;
@@ -34,6 +40,7 @@ export function processNoShowBookings() {
           status: 'refunded',
           paidAt: now.toISOString(),
           refundAmount,
+          reason: '未到场自动退款（扣除50%违约金）',
         } as Payment);
       }
     }
@@ -90,6 +97,7 @@ export function processAutoRenew() {
         method: 'card',
         status: 'success',
         paidAt: now.toISOString(),
+        reason: '超时自动续费',
       } as Payment);
     }
   }

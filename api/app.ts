@@ -7,6 +7,7 @@ import cors from 'cors'
 import path from 'path'
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 import authRoutes from './routes/auth.js'
 import studioRoutes from './routes/studios.js'
 import bookingRoutes from './routes/bookings.js'
@@ -22,11 +23,17 @@ dotenv.config()
 
 initDatabase()
 
+const UPLOAD_DIR = path.join(__dirname, '../../data/uploads')
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+}
+
 const app: express.Application = express()
 
 app.use(cors())
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use('/uploads', express.static(path.join(__dirname, '../../data/uploads')))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/studios', studioRoutes)

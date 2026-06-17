@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, saveDb } from '../db/database.js';
 import { authMiddleware } from './auth.js';
+import { saveBase64File } from '../utils/upload.js';
 import type { Work, ApiResponse, WorkRating } from '../../shared/types.js';
 
 const router = Router();
@@ -65,8 +66,23 @@ router.get('/user/:userId', (req, res) => {
 });
 
 router.post('/', authMiddleware, (req: any, res) => {
-  const { title, description, coverImage, mediaUrl, mediaType, duration, bookingId } = req.body;
+  const { title, description, coverImage, mediaUrl, mediaType, duration, bookingId, coverFile, mediaFile } = req.body;
   const db = getDb();
+  
+  let finalCoverImage = coverImage;
+  let finalMediaUrl = mediaUrl;
+  
+  try {
+    if (coverFile && typeof coverFile === 'string' && coverFile.startsWith('data:')) {
+      finalCoverImage = saveBase64File(coverFile, 'cover');
+    }
+    
+    if (mediaFile && typeof mediaFile === 'string' && mediaFile.startsWith('data:')) {
+      finalMediaUrl = saveBase64File(mediaFile, 'media');
+    }
+  } catch (e: any) {
+    return res.status(400).json({ success: false, error: '文件处理失败: ' + e.message } as ApiResponse<null>);
+  }
   
   const newWork: Work = {
     id: `work-${uuidv4().slice(0, 8)}`,
@@ -76,8 +92,8 @@ router.post('/', authMiddleware, (req: any, res) => {
     bookingId,
     title,
     description: description || '',
-    coverImage: coverImage || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
-    mediaUrl: mediaUrl || '/audio/demo.mp3',
+    coverImage: finalCoverImage || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+    mediaUrl: finalMediaUrl || '/audio/demo.mp3',
     mediaType: mediaType || 'audio',
     duration: Number(duration) || 0,
     plays: 0,

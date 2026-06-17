@@ -24,6 +24,13 @@ export interface Studio {
 
 export type BookingStatus = 'pending' | 'paid' | 'confirmed' | 'in_use' | 'completed' | 'cancelled' | 'no_show';
 
+export interface NoShowInfo {
+  originalPrice: number;
+  penaltyAmount: number;
+  refundAmount: number;
+  releasedAt: string;
+}
+
 export interface Booking {
   id: string;
   userId: string;
@@ -40,6 +47,7 @@ export interface Booking {
   qrCode: string;
   autoRenewed?: boolean;
   lastRenewTime?: string;
+  noShowInfo?: NoShowInfo;
   createdAt: string;
 }
 
@@ -61,6 +69,7 @@ export interface Payment {
   status: PaymentStatus;
   paidAt?: string;
   refundAmount?: number;
+  reason?: string;
 }
 
 export type MediaType = 'audio' | 'video';

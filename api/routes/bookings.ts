@@ -198,6 +198,17 @@ router.post('/:id/renew', authMiddleware, (req: any, res) => {
   db.bookings[bookingIndex].endTime = `${newEndHour.toString().padStart(2, '0')}:00`;
   db.bookings[bookingIndex].duration += hours;
   db.bookings[bookingIndex].totalPrice += renewPrice;
+  
+  db.payments.push({
+    id: `pay-${uuidv4().slice(0, 8)}`,
+    bookingId: booking.id,
+    amount: renewPrice,
+    method: 'card',
+    status: 'success',
+    paidAt: new Date().toISOString(),
+    reason: '手动续费',
+  } as any);
+  
   saveDb();
   
   res.json({ 

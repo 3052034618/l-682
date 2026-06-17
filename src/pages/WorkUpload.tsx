@@ -48,6 +48,15 @@ export default function WorkUpload() {
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -83,17 +92,26 @@ export default function WorkUpload() {
     
     setUploading(true);
     try {
-      const coverImage = formData.coverImage || `https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80`;
-      const mediaUrl = formData.mediaUrl || (formData.mediaType === 'audio' ? '/audio/demo.mp3' : '/video/demo.mp4');
+      let coverFileData = '';
+      let mediaFileData = '';
+      
+      if (coverFile) {
+        coverFileData = formData.coverImage;
+      }
+      if (mediaFile) {
+        mediaFileData = await fileToBase64(mediaFile);
+      }
       
       await workApi.create({
         title: formData.title,
         description: formData.description,
         mediaType: formData.mediaType,
-        coverImage,
-        mediaUrl,
+        coverImage: coverFile ? undefined : formData.coverImage,
+        mediaUrl: mediaFile ? undefined : formData.mediaUrl,
         duration: Number(formData.duration) || 180,
-      });
+        coverFile: coverFileData,
+        mediaFile: mediaFileData,
+      } as any);
       
       setSuccess(true);
       setTimeout(() => {

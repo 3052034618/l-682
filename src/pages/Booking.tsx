@@ -54,18 +54,31 @@ export default function Booking() {
   const handleSlotClick = (slot: TimeSlot) => {
     if (!slot.available) return;
     
+    const clickHour = parseInt(slot.startTime.split(':')[0]);
+    
     setSelectedSlots(prev => {
       const sorted = [...prev].sort();
       
       if (sorted.includes(slot.startTime)) {
-        return sorted.filter(s => s !== slot.startTime);
+        const firstHour = parseInt(sorted[0].split(':')[0]);
+        const lastHour = parseInt(sorted[sorted.length - 1].split(':')[0]);
+        
+        if (clickHour === firstHour) {
+          return sorted.slice(1);
+        } else if (clickHour === lastHour) {
+          return sorted.slice(0, -1);
+        } else {
+          if (confirm('取消中间时段将清空所有选择，需要重新开始选择。确定要清空吗？')) {
+            return [];
+          }
+          return sorted;
+        }
       }
       
       if (sorted.length === 0) {
         return [slot.startTime];
       }
       
-      const clickHour = parseInt(slot.startTime.split(':')[0]);
       const firstHour = parseInt(sorted[0].split(':')[0]);
       const lastHour = parseInt(sorted[sorted.length - 1].split(':')[0]);
       
@@ -74,7 +87,7 @@ export default function Booking() {
       } else if (clickHour === lastHour + 1) {
         return [...sorted, slot.startTime].sort();
       } else {
-        alert('请选择连续的时段！');
+        alert('请选择连续的时段！只能从已选时段的前后两端添加。');
         return sorted;
       }
     });

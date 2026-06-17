@@ -420,9 +420,25 @@ export default function Profile() {
                               </Link>
                             )}
                             {booking.status === 'no_show' && (
-                              <div className="flex items-center gap-2 text-rose-400 text-sm">
-                                <AlertCircle className="w-4 h-4" />
-                                未到场，已扣除50%费用，时段已释放
+                              <div className="w-full">
+                                <div className="flex items-center gap-2 text-rose-400 text-sm mb-3">
+                                  <AlertCircle className="w-4 h-4" />
+                                  未到场，时段已自动释放
+                                </div>
+                                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-dark-400">原价</span>
+                                    <span className="text-dark-200">¥{booking.noShowInfo?.originalPrice ?? booking.totalPrice}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-rose-400">违约金（50%）</span>
+                                    <span className="text-rose-400">-¥{booking.noShowInfo?.penaltyAmount ?? (booking.totalPrice * 0.5).toFixed(2)}</span>
+                                  </div>
+                                  <div className="border-t border-rose-500/20 pt-2 flex justify-between text-sm font-medium">
+                                    <span className="text-emerald-400">退款金额</span>
+                                    <span className="text-emerald-400">¥{booking.noShowInfo?.refundAmount ?? (booking.totalPrice * 0.5).toFixed(2)}</span>
+                                  </div>
+                                </div>
                               </div>
                             )}
                           </div>
