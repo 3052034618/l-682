@@ -55,26 +55,43 @@ export default function Booking() {
     if (!slot.available) return;
     
     setSelectedSlots(prev => {
-      if (prev.includes(slot.startTime)) {
-        return prev.filter(s => s !== slot.startTime);
+      const sorted = [...prev].sort();
+      
+      if (sorted.includes(slot.startTime)) {
+        return sorted.filter(s => s !== slot.startTime);
       }
-      return [...prev, slot.startTime].sort();
+      
+      if (sorted.length === 0) {
+        return [slot.startTime];
+      }
+      
+      const clickHour = parseInt(slot.startTime.split(':')[0]);
+      const firstHour = parseInt(sorted[0].split(':')[0]);
+      const lastHour = parseInt(sorted[sorted.length - 1].split(':')[0]);
+      
+      if (clickHour === firstHour - 1) {
+        return [slot.startTime, ...sorted].sort();
+      } else if (clickHour === lastHour + 1) {
+        return [...sorted, slot.startTime].sort();
+      } else {
+        alert('请选择连续的时段！');
+        return sorted;
+      }
     });
   };
 
   const getTotalHours = () => {
     if (selectedSlots.length === 0) return 0;
-    
+    return selectedSlots.length;
+  };
+
+  const getTimeRange = () => {
+    if (selectedSlots.length === 0) return { startTime: '', endTime: '' };
     const sorted = [...selectedSlots].sort();
-    let hours = 1;
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = parseInt(sorted[i - 1].split(':')[0]);
-      const curr = parseInt(sorted[i].split(':')[0]);
-      if (curr === prev + 1) {
-        hours++;
-      }
-    }
-    return hours;
+    const startTime = sorted[0];
+    const endHour = parseInt(sorted[sorted.length - 1].split(':')[0]) + 1;
+    const endTime = `${String(endHour).padStart(2, '0')}:00`;
+    return { startTime, endTime };
   };
 
   const getTotalPrice = () => {
@@ -124,22 +141,19 @@ export default function Booking() {
       navigate('/login');
       return;
     }
-    if (selectedSlots.length < 2) {
-      alert('请至少选择2个连续时段');
+    if (selectedSlots.length < 1) {
+      alert('请至少选择1个时段');
       return;
     }
     setShowPaymentModal(true);
   };
 
   const handlePayment = async () => {
-    if (!id || selectedSlots.length < 2 || !studio) return;
+    if (!id || selectedSlots.length < 1 || !studio) return;
     
     setProcessing(true);
     try {
-      const sortedSlots = [...selectedSlots].sort();
-      const startTime = sortedSlots[0];
-      const endHour = parseInt(sortedSlots[sortedSlots.length - 1].split(':')[0]) + 1;
-      const endTime = `${String(endHour).padStart(2, '0')}:00`;
+      const { startTime, endTime } = getTimeRange();
       
       const booking = await bookingApi.create({
         studioId: id,
@@ -378,6 +392,12 @@ export default function Booking() {
                   <span className="text-dark-200">{selectedDate || '请选择'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
+                  <span className="text-dark-400">时间</span>
+                  <span className="text-dark-200">
+                    {getTimeRange().startTime ? `${getTimeRange().startTime} - ${getTimeRange().endTime}` : '请选择'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
                   <span className="text-dark-400">时长</span>
                   <span className="text-dark-200">{getTotalHours()} 小时</span>
                 </div>
@@ -396,9 +416,9 @@ export default function Booking() {
               
               <button
                 onClick={handleBooking}
-                disabled={selectedSlots.length < 2}
+                disabled={selectedSlots.length < 1}
                 className={`w-full btn-primary text-lg ${
-                  selectedSlots.length < 2 ? 'opacity-50 cursor-not-allowed' : ''
+                  selectedSlots.length < 1 ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isAuthenticated ? '立即预约' : '登录后预约'}
@@ -406,7 +426,7 @@ export default function Booking() {
               
               <div className="mt-4 flex items-start gap-2 text-xs text-dark-500">
                 <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>至少选择2个连续时段，预约成功后请在使用前15分钟到达并扫码签到</p>
+                <p>请选择连续时段，预约成功后请在使用前15分钟到达并扫码签到</p>
               </div>
             </div>
           </div>

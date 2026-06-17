@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   User, Calendar, Music, Settings, QrCode, Clock, Star,
-  ChevronRight, LogOut, Camera, Upload, Play, Heart
+  ChevronRight, LogOut, Camera, Upload, Play, Heart,
+  AlertCircle, CheckCircle, Bell, X
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { bookingApi, workApi } from '@/lib/api';
@@ -20,6 +21,9 @@ export default function Profile() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrCode, setQrCode] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [renewNotice, setRenewNotice] = useState<Booking | null>(null);
+  const [, forceUpdate] = useState(0);
+  const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
     const path = location.pathname.split('/').pop();
@@ -34,7 +38,47 @@ export default function Profile() {
     } else if (activeTab === 'works') {
       fetchWorks();
     }
-  }, [activeTab]);
+  }, [activeTab, user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab === 'works') {
+      fetchWorks();
+    }
+  }, [location.key]);
+
+  useEffect(() => {
+    if (activeTab === 'bookings' && user) {
+      pollRef.current = window.setInterval(() => {
+        fetchBookings();
+        forceUpdate(n => n + 1);
+      }, 10000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [activeTab, user?.id]);
+
+  useEffect(() => {
+    const renewed = bookings.find(b => b.autoRenewed && b.status === 'in_use');
+    if (renewed && renewed !== renewNotice) {
+      setRenewNotice(renewed);
+    }
+  }, [bookings]);
+
+  const getRemainingTime = (booking: Booking) => {
+    if (booking.status !== 'in_use') return null;
+    const end = new Date(`${booking.date}T${booking.endTime}`).getTime();
+    const now = Date.now();
+    const diff = end - now;
+    if (diff <= 0) return '已超时';
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    if (hours > 0) return `${hours}时${mins}分${secs}秒`;
+    if (mins > 0) return `${mins}分${secs}秒`;
+    return `${secs}秒`;
+  };
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -69,6 +113,37 @@ export default function Profile() {
       setShowQrModal(true);
     } catch (err) {
       console.error('Failed to get QR code:', err);
+    }
+  };
+
+  const handleCheckin = async (bookingId: string) => {
+    try {
+      await bookingApi.checkin(bookingId);
+      alert('签到成功！已开始计时使用。');
+      fetchBookings();
+    } catch (err: any) {
+      alert(err.message || '签到失败');
+    }
+  };
+
+  const handleCheckout = async (bookingId: string) => {
+    if (!confirm('确定要结束使用吗？')) return;
+    try {
+      await bookingApi.checkout(bookingId);
+      alert('使用已结束，欢迎上传作品分享！');
+      fetchBookings();
+    } catch (err: any) {
+      alert(err.message || '签退失败');
+    }
+  };
+
+  const handleRenew = async (bookingId: string, hours: number) => {
+    try {
+      const result = await bookingApi.renew(bookingId, hours);
+      alert(`续费成功！延长${hours}小时，当前总费用¥${result.totalPrice}`);
+      fetchBookings();
+    } catch (err: any) {
+      alert(err.message || '续费失败');
     }
   };
 
@@ -120,6 +195,28 @@ export default function Profile() {
   return (
     <div className="min-h-screen pt-20 bg-dark-900">
       <div className="container mx-auto px-4 py-8">
+
+        {renewNotice && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 animate-scale-in">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Bell className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-amber-400 mb-1">系统已自动续费</h4>
+              <p className="text-sm text-dark-300">
+                {renewNotice.studioName} 使用时间已超时，系统已自动续费1小时。
+                当前结束时间: {renewNotice.endTime}，总费用: ¥{renewNotice.totalPrice}
+              </p>
+            </div>
+            <button
+              onClick={() => setRenewNotice(null)}
+              className="text-dark-500 hover:text-dark-300"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         <div className="grid md:grid-cols-4 gap-8">
           <div className="md:col-span-1">
             <div className="card p-6 sticky top-24">
@@ -244,18 +341,38 @@ export default function Profile() {
                               <Star className="w-4 h-4 text-dark-500" />
                               <span className="text-sm text-dark-300">订单号: {booking.id.slice(-8)}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <QrCode className="w-4 h-4 text-dark-500" />
-                              <span className="text-sm text-dark-300">扫码签到</span>
-                            </div>
+                            {booking.status === 'in_use' && (
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-emerald-400" />
+                                <span className="text-sm text-emerald-400 font-medium">
+                                  剩余 {getRemainingTime(booking)}
+                                </span>
+                              </div>
+                            )}
                           </div>
+
+                          {booking.status === 'in_use' && booking.autoRenewed && (
+                            <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
+                              <Bell className="w-4 h-4 text-amber-400" />
+                              <span className="text-sm text-amber-300">
+                                系统已自动续费1小时，新增费用已扣除。如不需继续使用请点击"结束使用"
+                              </span>
+                            </div>
+                          )}
                           
-                          <div className="flex gap-3">
+                          <div className="flex gap-3 flex-wrap">
                             {['paid', 'confirmed'].includes(booking.status) && (
                               <>
                                 <button
-                                  onClick={() => handleShowQr(booking)}
+                                  onClick={() => handleCheckin(booking.id)}
                                   className="btn-primary text-sm py-2 px-4 flex items-center gap-2"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  签到使用
+                                </button>
+                                <button
+                                  onClick={() => handleShowQr(booking)}
+                                  className="btn-secondary text-sm py-2 px-4 flex items-center gap-2"
                                 >
                                   <QrCode className="w-4 h-4" />
                                   签到码
@@ -269,13 +386,29 @@ export default function Profile() {
                               </>
                             )}
                             {booking.status === 'in_use' && (
-                              <button
-                                onClick={() => handleShowQr(booking)}
-                                className="btn-primary text-sm py-2 px-4 flex items-center gap-2"
-                              >
-                                <QrCode className="w-4 h-4" />
-                                使用中
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleCheckout(booking.id)}
+                                  className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  结束使用
+                                </button>
+                                <button
+                                  onClick={() => handleRenew(booking.id, 1)}
+                                  className="btn-primary text-sm py-2 px-4 flex items-center gap-2"
+                                >
+                                  <Clock className="w-4 h-4" />
+                                  续费1小时
+                                </button>
+                                <button
+                                  onClick={() => handleShowQr(booking)}
+                                  className="btn-secondary text-sm py-2 px-4 flex items-center gap-2"
+                                >
+                                  <QrCode className="w-4 h-4" />
+                                  查看码
+                                </button>
+                              </>
                             )}
                             {booking.status === 'completed' && (
                               <Link
@@ -285,6 +418,12 @@ export default function Profile() {
                                 <Upload className="w-4 h-4" />
                                 上传作品
                               </Link>
+                            )}
+                            {booking.status === 'no_show' && (
+                              <div className="flex items-center gap-2 text-rose-400 text-sm">
+                                <AlertCircle className="w-4 h-4" />
+                                未到场，已扣除50%费用，时段已释放
+                              </div>
                             )}
                           </div>
                         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Music, Video, Image, FileAudio, X, Check } from 'lucide-react';
 import { workApi } from '@/lib/api';
@@ -7,6 +7,9 @@ import { useAuthStore } from '@/stores/authStore';
 export default function WorkUpload() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -15,12 +18,60 @@ export default function WorkUpload() {
     mediaUrl: '',
     duration: 0,
   });
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCoverPick = () => {
+    coverInputRef.current?.click();
+  };
+
+  const handleMediaPick = () => {
+    mediaInputRef.current?.click();
+  };
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverFile(file);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setFormData(prev => ({ ...prev, coverImage: ev.target?.result as string || '' }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setMediaFile(file);
+      const isAudio = file.type.startsWith('audio/');
+      const isVideo = file.type.startsWith('video/');
+      if (isAudio) {
+        setFormData(prev => ({ ...prev, mediaType: 'audio', mediaUrl: file.name }));
+      } else if (isVideo) {
+        setFormData(prev => ({ ...prev, mediaType: 'video', mediaUrl: file.name }));
+      } else {
+        setFormData(prev => ({ ...prev, mediaUrl: file.name }));
+      }
+      const url = URL.createObjectURL(file);
+      const element = isAudio ? new Audio(url) : document.createElement('video');
+      element.preload = 'metadata';
+      element.onloadedmetadata = () => {
+        const dur = Math.round(element.duration);
+        if (!isNaN(dur)) {
+          setFormData(prev => ({ ...prev, duration: dur }));
+        }
+        URL.revokeObjectURL(url);
+      };
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,17 +203,42 @@ export default function WorkUpload() {
             <div className="card p-6">
               <h3 className="text-lg font-semibold text-dark-100 mb-4">封面图片</h3>
               
-              <div className="border-2 border-dashed border-dark-600/50 rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-800/50 flex items-center justify-center">
-                  <Image className="w-8 h-8 text-dark-500" />
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleCoverChange}
+              />
+              
+              {formData.coverImage ? (
+                <div className="relative rounded-xl overflow-hidden mb-4">
+                  <img
+                    src={formData.coverImage}
+                    alt="封面预览"
+                    className="w-full aspect-square object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setCoverFile(null); setFormData(p => ({ ...p, coverImage: '' })); }}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-dark-900/70 flex items-center justify-center text-white hover:bg-dark-900"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <p className="text-dark-400 mb-4">拖拽图片到此处或点击上传</p>
-                <p className="text-xs text-dark-600 mb-4">支持 JPG、PNG 格式，建议尺寸 600x600</p>
-                <button type="button" className="btn-secondary text-sm py-2 px-6">
-                  <Upload className="w-4 h-4 inline mr-2" />
-                  选择图片
-                </button>
-              </div>
+              ) : (
+                <div className="border-2 border-dashed border-dark-600/50 rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-800/50 flex items-center justify-center">
+                    <Image className="w-8 h-8 text-dark-500" />
+                  </div>
+                  <p className="text-dark-400 mb-4">拖拽图片到此处或点击上传</p>
+                  <p className="text-xs text-dark-600 mb-4">支持 JPG、PNG 格式，建议尺寸 600x600</p>
+                  <button type="button" onClick={handleCoverPick} className="btn-secondary text-sm py-2 px-6">
+                    <Upload className="w-4 h-4 inline mr-2" />
+                    选择图片
+                  </button>
+                </div>
+              )}
               
               <div className="mt-4">
                 <label className="block text-sm text-dark-300 mb-2">或输入图片URL</label>
@@ -180,35 +256,72 @@ export default function WorkUpload() {
             <div className="card p-6">
               <h3 className="text-lg font-semibold text-dark-100 mb-4">媒体文件</h3>
               
-              <div className="border-2 border-dashed border-dark-600/50 rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-800/50 flex items-center justify-center">
+              <input
+                ref={mediaInputRef}
+                type="file"
+                accept="audio/*,video/*"
+                className="hidden"
+                onChange={handleMediaChange}
+              />
+              
+              {mediaFile ? (
+                <div className="p-4 rounded-xl bg-dark-800/50 border border-dark-700/50 flex items-center gap-4">
                   {formData.mediaType === 'audio' ? (
-                    <FileAudio className="w-8 h-8 text-dark-500" />
+                    <div className="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+                      <FileAudio className="w-6 h-6 text-primary-400" />
+                    </div>
                   ) : (
-                    <Video className="w-8 h-8 text-dark-500" />
+                    <div className="w-12 h-12 rounded-lg bg-rose-500/20 flex items-center justify-center flex-shrink-0">
+                      <Video className="w-6 h-6 text-rose-400" />
+                    </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-dark-100 font-medium truncate">{mediaFile.name}</p>
+                    <p className="text-sm text-dark-500">
+                      {(mediaFile.size / 1024 / 1024).toFixed(2)} MB
+                      {formData.duration > 0 && ` · ${Math.floor(formData.duration / 60)}:${String(formData.duration % 60).padStart(2, '0')}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setMediaFile(null); setFormData(p => ({ ...p, mediaUrl: '', duration: 0 })); }}
+                    className="w-8 h-8 rounded-full bg-dark-700/50 flex items-center justify-center text-dark-400 hover:text-white hover:bg-dark-700 flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <p className="text-dark-400 mb-4">
-                  拖拽{formData.mediaType === 'audio' ? '音频' : '视频'}文件到此处或点击上传
-                </p>
-                <p className="text-xs text-dark-600 mb-4">
-                  {formData.mediaType === 'audio' ? '支持 MP3、WAV 格式，最大 50MB' : '支持 MP4 格式，最大 200MB'}
-                </p>
-                <button type="button" className="btn-secondary text-sm py-2 px-6">
-                  <Upload className="w-4 h-4 inline mr-2" />
-                  选择文件
-                </button>
-              </div>
+              ) : (
+                <div className="border-2 border-dashed border-dark-600/50 rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-800/50 flex items-center justify-center">
+                    {formData.mediaType === 'audio' ? (
+                      <FileAudio className="w-8 h-8 text-dark-500" />
+                    ) : (
+                      <Video className="w-8 h-8 text-dark-500" />
+                    )}
+                  </div>
+                  <p className="text-dark-400 mb-4">
+                    拖拽{formData.mediaType === 'audio' ? '音频' : '视频'}文件到此处或点击上传
+                  </p>
+                  <p className="text-xs text-dark-600 mb-4">
+                    {formData.mediaType === 'audio' ? '支持 MP3、WAV 格式，最大 50MB' : '支持 MP4 格式，最大 200MB'}
+                  </p>
+                  <button type="button" onClick={handleMediaPick} className="btn-secondary text-sm py-2 px-6">
+                    <Upload className="w-4 h-4 inline mr-2" />
+                    选择文件
+                  </button>
+                </div>
+              )}
               
               <div className="mt-4">
                 <label className="block text-sm text-dark-300 mb-2">或输入媒体URL（演示用）</label>
                 <input
                   type="url"
                   name="mediaUrl"
-                  value={formData.mediaUrl}
+                  value={mediaFile ? mediaFile.name : formData.mediaUrl}
                   onChange={handleInputChange}
                   placeholder="https://..."
                   className="input-field"
+                  disabled={!!mediaFile}
                 />
               </div>
             </div>

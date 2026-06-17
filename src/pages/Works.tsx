@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Play, Heart, Star, Headphones, Search, Filter, Music, Video } from 'lucide-react';
+import { Play, Heart, Star, Headphones, Search, Filter, Music, Video, X } from 'lucide-react';
 import type { Work } from '../../shared/types';
 import { workApi } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function Works() {
+  const { isAuthenticated } = useAuthStore();
   const [works, setWorks] = useState<Work[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('popular');
   const [typeFilter, setTypeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [ratingWork, setRatingWork] = useState<Work | null>(null);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [selectedRating, setSelectedRating] = useState(0);
 
   useEffect(() => {
     fetchWorks();
@@ -48,6 +53,30 @@ export default function Works() {
       ));
     } catch (err) {
       console.error('Failed to like:', err);
+    }
+  };
+
+  const openRating = (work: Work) => {
+    if (!isAuthenticated) {
+      alert('请先登录后再评分');
+      return;
+    }
+    setRatingWork(work);
+    setSelectedRating(0);
+    setHoverRating(0);
+  };
+
+  const handleSubmitRating = async () => {
+    if (!ratingWork || selectedRating === 0) return;
+    try {
+      const result = await workApi.rate(ratingWork.id, selectedRating);
+      setWorks(prev => prev.map(w =>
+        w.id === ratingWork.id ? { ...w, rating: result.rating, ratingCount: result.ratingCount } : w
+      ));
+      setRatingWork(null);
+      alert(`评分成功！当前平均分 ${result.rating}`);
+    } catch (err: any) {
+      alert(err.message || '评分失败');
     }
   };
 
@@ -218,10 +247,14 @@ export default function Works() {
                         {work.likes}
                       </button>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openRating(work)}
+                      className="flex items-center gap-1 hover:scale-110 transition-transform"
+                      title="点击评分"
+                    >
                       <Star className="w-3.5 h-3.5 text-gold-400 fill-gold-400" />
-                      <span className="text-xs text-dark-300">{work.rating}</span>
-                    </div>
+                      <span className="text-xs text-dark-300">{work.rating} ({work.ratingCount})</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -229,6 +262,81 @@ export default function Works() {
           </div>
         )}
       </div>
+
+      {ratingWork && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-dark-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="card p-6 w-full max-w-md mx-4 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-dark-50">给作品评分</h3>
+              <button
+                onClick={() => setRatingWork(null)}
+                className="text-dark-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center mb-6">
+              <div className="w-24 h-24 mx-auto mb-4 rounded-xl overflow-hidden">
+                <img
+                  src={ratingWork.coverImage}
+                  alt={ratingWork.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <h4 className="font-semibold text-dark-100 mb-1">{ratingWork.title}</h4>
+              <p className="text-sm text-dark-500">{ratingWork.username}</p>
+            </div>
+
+            <div className="text-center mb-6">
+              <p className="text-dark-400 mb-4">点击星星进行评分</p>
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onClick={() => setSelectedRating(star)}
+                    className="transition-transform hover:scale-110"
+                  >
+                    <Star
+                      className={`w-10 h-10 transition-colors ${
+                        star <= (hoverRating || selectedRating)
+                          ? 'text-gold-400 fill-gold-400'
+                          : 'text-dark-600'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              {selectedRating > 0 && (
+                <p className="mt-3 text-gold-400 font-medium">
+                  您给了 {selectedRating} 星评价
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setRatingWork(null)}
+                className="flex-1 btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitRating}
+                disabled={selectedRating === 0}
+                className={`flex-1 btn-primary ${selectedRating === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                提交评分
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

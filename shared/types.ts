@@ -38,6 +38,8 @@ export interface Booking {
   checkInTime?: string;
   checkOutTime?: string;
   qrCode: string;
+  autoRenewed?: boolean;
+  lastRenewTime?: string;
   createdAt: string;
 }
 
